@@ -1,7 +1,7 @@
 ---
 layout:     post
 title:      "Normalizing Flow - RealNVP 이론 과 구현까지 (2)"
-date:       2021-5-06 00:00:00
+date:       2021-5-05 00:00:00
 author:     "MJ Shin"
 tags:
     - Machine Learning
