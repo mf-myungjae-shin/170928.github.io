@@ -55,3 +55,14 @@ $$exp[\sum_{j} s(x_{1:d})_j]$$
 이제 본격적으로 pytorch 구현과 함께 살펴보도록 하겠습니다. 
 </p>
 
+> 참조 : https://github.com/fmu2/realNVP/blob/master/realnvp.py
+'''{.python}
+class RealNVP(nn.Module):
+    def __init__(self, prior, n_dim, n_channel, n_data):
+        super(RealNVP, self).__init__()
+        self.prior = prior
+        self.n_dim = n_dim # image dimension 
+        self.n_channel = n_channel # image channel 수
+        self.n_data = n_data # data 갯수
+
+'''
