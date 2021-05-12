@@ -52,18 +52,87 @@ $$exp[\sum_{j} s(x_{1:d})_j]$$
 </p>
 
 <p>
-이제 본격적으로 pytorch 구현과 함께 살펴보도록 하겠습니다. 
+이제 본격적으로 pytorch 구현과 함께 살펴보도록 하겠습니다. 이번 포스팅에서는 cifar-10을 기준으로 코드를 작성하였습니다.
 </p>
 
-> 참조 : https://github.com/fmu2/realNVP/blob/master/realnvp.py
+> 참조 : https://github.com/fmu2/realNVP/blob/master/realnvp.py, https://github.com/xqding/RealNVP/blob/master/Real%20NVP%20Tutorial.ipynb
 
 
-'''
-class RealNVP(nn.Module):
-    def __init__(self, prior, n_dim, n_channel, r_dim):
-        super(RealNVP, self).__init__()
-        self.prior = prior
-        self.n_dim = n_dim         # image dimension 
-        self.n_channel = n_channel # image channel 수
-        self.r_dim = r_dim         # residual block에서 한번 변환되었을때의 dimension
-'''
+<p> </p>
+
+
+<p>다음으로 Coupling Layer에 대해서 살펴보겠습니다.</p>
+
+<img src="https://github.com/170928/170928.github.io/blob/master/_images/normalizing_flow/figure13.PNG?raw=true">
+
+<p>RealNVP의 핵심이 되는 Coupling Layer의 경우 수식은 단순하지만, image에 적용할 때 생각보다 복잡합니다. 논문에서는 masking을 활용하는 "Masked convolution"을 사용한다고 서술하고 있으며, 이 방법에 대해서 그림과 함께 설명을 해주고 있지만 time-series 데이터와 강화학습만을 다루던 저에게는 생각보다 쉽게 와닿지 않았습니다.</p>
+
+<p>우선 위의 그림에서 (좌)는 "spatial checkerboard pattern mask", (우)는 "channel-wise masking"으로 논문에서 정의하고 있습니다. 그리고 (좌)에서 (우)로 만드는 과정을 "squeezing operation"이라고 정의합니다. 이때 (좌)가 H x W x C 라면 (우)는 H/2 x W/2 x 4*C 가 되도록 하는 특징이 있습니다. </p>
+
+<p> 이 두가지 masking과 squeezing operation의 적용 순서는 다음과 같습니다.
+
+1. (좌) 의 mask 를 사용하여 Coupling layer forward를 3번 수행 .
+2. squeezing operation 수행.
+3. (우) 의 mask 를 사용하여 Coupling layer forward를 3번 수행.
+
+이때, (좌)의 spatial checkerboard pattern mask 는 spatial coordinate의 합이 홀수인 경우 "1", 짝수인 경우 "0"으로 설정한 것입니다. 그리고, channel-wise mask는 channel 축으로 앞에서 절반에 "1", 나머지 절반에 "0"을 설정합니다. 
+</p>
+
+<p>논문에서 용어를 한번더 바꾸는데 squeezing operation을 수행하는 것을 "multi-scale architecture"에서 사용하기 때문에 "scale" 이라고 정의하고 사용합니다. </p>
+
+<img src="https://github.com/170928/170928.github.io/blob/master/_images/normalizing_flow/figure14.PNG?raw=true">
+
+<p>그리고 이 그림을 이해할 수 있게 설명해줍니다. 위에서 mask를 0과 1로 한 것을 한번 수행할때 마다 서로 바꾸어 줍니다. 1을 0으로 0을 1로! 이를 통해서 1번 coupling layer를 지나면서 x1:d의 경우 변하지 않았던 부분이 다음에는 변하게되도록 해줍니다. 이 그림의 +오 X 칸을 coupling layer라고 생각하시면 되며 시작사는 빈 마름모를 x1:d 와 xd+1:D라고 생각하시면 됩니다. </p>
+
+<p>아래는 RealNVP의 init 부분입니다. 우선 cifar-10 이미지를 사용해서 학습하기 위해서 다음과 같이 이미지의 dimension, channel 수 그리고 중간 t와 s로 사용되는 residual block을 위한 r_dim 을 전달해주어야 합니다. 앞서 말씀드린대로 checkboard mask과 channel-wise mask를 사용해서 각각 3번의 coupling layer를 지나게 되므로 해당 과정을 nn.Modulelist로 한번에 수행할 수 있도록 구성하였습니다. </p>
+
+```python
+    class RealNVP(nn.Module):
+        def __init__(self, prior, n_dim, n_channel, r_dim):
+            super(RealNVP, self).__init__()
+            self.prior = prior
+            self.n_dim = n_dim         # image dimension 
+            self.n_channel = n_channel # image channel 수
+            self.r_dim = r_dim         # residual block 변환되었을때의 dimension
+    
+            # cifar-10 images는 32 x 32 x 3 
+            # n_dim : 32        <- size
+            # n_channel : 3     <- chan
+            # r_dim : 64        <-dim
+    
+            # SCALE 1: 3 x 32 x 32
+            self.s1_ckbd = self.spatial_checker_board_mask(n_channel, r_dim, n_dim)
+            self.s1_chan = self.channel_wise_mask(n_channel*4, r_dim)
+            self.order_matrix_1 = self.order_matrix(n_channel).cuda()
+            n_channel *= 2
+            n_dim //= 2
+    
+            # SCALE 2: 6 x 16 x 16
+            self.s2_ckbd = self.spatial_checker_board_mask(n_channel, r_dim, n_dim)
+    
+    
+        def spatial_checker_board_mask(self, n_dim, n_channel, mid_dim):
+            return nn.ModuleList([CheckerboardCouplingLayer(n_channel, mid_dim, n_dim, 1.), 
+                                  CheckerboardCouplingLayer(n_channel, mid_dim, n_dim, 0.),
+                                  CheckerboardCouplingLayer(n_channel, mid_dim, n_dim, 1.)])
+    
+        def channel_wise_mask(self, n_dim, n_channel, mid_dim):
+            return nn.ModuleList([ChannelCouplingLayer(n_channel, mid_dim, n_dim, 0.),
+                                  ChannelCouplingLayer(n_channel, mid_dim, n_dim, 1.),
+                                  ChannelCouplingLayer(n_channel, mid_dim, n_dim, 0.)])
+    
+        def squeeze_operation(self, x):
+            [B, C, H, W] = list(x.size())
+            x = x.reshape(B, C, H//2, 2, W//2, 2)
+            x = x.permute(0, 1, 3, 5, 2, 4) # (B, C, 2(for H), 2(for W), H//2, w//2)
+            x = x.reshape(B, C*4, H//2, W//2)
+            return x
+    
+        def undo_squeeze(self, x):
+            [B, C, H, W] = list(x.size())
+            x = x.reshape(B, C//4, 2, 2, H, W)
+            x = x.permute(0, 1, 4, 2, 5, 3)
+            x = x.reshape(B, C//4, H*2, W*2)
+            return x
+```
+
