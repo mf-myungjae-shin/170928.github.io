@@ -56,6 +56,8 @@ $$exp[\sum_{j} s(x_{1:d})_j]$$
 </p>
 
 > 참조 : https://github.com/fmu2/realNVP/blob/master/realnvp.py
+
+
 '''{.python}
 class RealNVP(nn.Module):
     def __init__(self, prior, n_dim, n_channel, n_data):
