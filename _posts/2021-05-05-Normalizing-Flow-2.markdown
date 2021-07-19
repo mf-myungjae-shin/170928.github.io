@@ -134,8 +134,6 @@ $$exp[\sum_{j} s(x_{1:d})_j]$$
 
 <p>RealNVP의 흐름은 다음과 같습니다. 가장 큰 코드의 흐름은 cifar-10 의 image input x 가 들어오면, log_prob 함수를 호출해서 image x 가 normalizing flow가 추정한 distribution에서의 log-likelihood를 계산하는 것입니다.  </p>
 
-
-
 ```python
     def forward(self, x):
         """
@@ -146,6 +144,8 @@ $$exp[\sum_{j} s(x_{1:d})_j]$$
         """
         return self.log_prob(x), weight_scale
 ```
+
+<p> 이 포스트의 수식 설명 마지막 부분에서 log P(x)를 계산하기 위한 수식을 다시한번 살펴 볼 필요가 있습니다. 이떄 수식의 가장 끝에 보이는 Jacobian이 구현에서 가장 귀찮고 어려운 부분이 됩니다.  </p>
 
 ```python
     def log_prob(self, x):
@@ -162,9 +162,15 @@ $$exp[\sum_{j} s(x_{1:d})_j]$$
         log_det_J = torch.sum(log_diag_J, dim=(1, 2, 3))
         log_prior_prob = torch.sum(self.prior.log_prob(z), dim=(1, 2, 3))
         return log_prior_prob + log_det_J
+```
+
+<p> 우리는 RealNVP class를 처음 정의할 때 3 층으로 구성된 CheckBoardCoupling과 3층으로 구성된 ChannelWiseCoupling을 정의하였었습니다. 이 Layer들은 각 층마다 image input x 의 latent z 와 Jacobian 을 계산합니다. </p>
+
+<p> 이때, 해당 수식처럼 Jacobian들은 계속해서 더해주면 되므로, 아래의 f 함수에서도 "inc"는 계속해서 for문을 돌면서 더해지는 것을 볼 수 있습니다. 반면, z는 다음 layer의 입력으로 다시 들어가는 것을 알 수 있습니다. </p>
+
+```python
     def f(self, x):
-        """Transformation f: X -> Z (inverse of g).
-    
+        """Transformation f: X -> Z 
         Args:
             x: tensor in data space X.
         Returns:
@@ -190,238 +196,10 @@ $$exp[\sum_{j} s(x_{1:d})_j]$$
         for i in range(len(self.s2_ckbd)):
             z, inc = self.s2_ckbd[i](z)
             log_diag_J = log_diag_J + inc
-    
-        if self.datainfo.name in ['imnet32', 'imnet64', 'celeba']:
-            z, log_diag_J = self.squeeze(z), self.squeeze(log_diag_J)
-            for i in range(len(self.s2_chan)):
-                z, inc = self.s2_chan[i](z)
-                log_diag_J = log_diag_J + inc
-            z, log_diag_J = self.undo_squeeze(z), self.undo_squeeze(log_diag_J)
-    
-            z, z_off_2 = self.factor_out(z, self.order_matrix_2)
-            log_diag_J, log_diag_J_off_2 = self.factor_out(log_diag_J, self.order_matrix_2)
-    
-            # SCALE 3: 8(16) x 8(16)
-            for i in range(len(self.s3_ckbd)):
-                z, inc = self.s3_ckbd[i](z)
-                log_diag_J = log_diag_J + inc
-    
-            z, log_diag_J = self.squeeze(z), self.squeeze(log_diag_J)
-            for i in range(len(self.s3_chan)):
-                z, inc = self.s3_chan[i](z)
-                log_diag_J = log_diag_J + inc
-            z, log_diag_J = self.undo_squeeze(z), self.undo_squeeze(log_diag_J)
-    
-            z, z_off_3 = self.factor_out(z, self.order_matrix_3)
-            log_diag_J, log_diag_J_off_3 = self.factor_out(log_diag_J, self.order_matrix_3)
-    
-            # SCALE 4: 4(8) x 4(8)
-            for i in range(len(self.s4_ckbd)):
-                z, inc = self.s4_ckbd[i](z)
-                log_diag_J = log_diag_J + inc
-    
-            if self.datainfo.name in ['imnet64', 'celeba']:
-                z, log_diag_J = self.squeeze(z), self.squeeze(log_diag_J)
-                for i in range(len(self.s4_chan)):
-                    z, inc = self.s4_chan[i](z)
-                    log_diag_J = log_diag_J + inc
-                z, log_diag_J = self.undo_squeeze(z), self.undo_squeeze(log_diag_J)
-    
-                z, z_off_4 = self.factor_out(z, self.order_matrix_4)
-                log_diag_J, log_diag_J_off_4 = self.factor_out(log_diag_J, self.order_matrix_4)
-    
-                # SCALE 5: 4 x 4
-                for i in range(len(self.s5_ckbd)):
-                    z, inc = self.s5_ckbd[i](z)
-                    log_diag_J = log_diag_J + inc
-    
-                z = self.restore(z, z_off_4, self.order_matrix_4)
-                log_diag_J = self.restore(log_diag_J, log_diag_J_off_4, self.order_matrix_4)
-    
-            z = self.restore(z, z_off_3, self.order_matrix_3)
-            z = self.restore(z, z_off_2, self.order_matrix_2)
-            log_diag_J = self.restore(log_diag_J, log_diag_J_off_3, self.order_matrix_3)
-            log_diag_J = self.restore(log_diag_J, log_diag_J_off_2, self.order_matrix_2)
-        
+            
         z = self.restore(z, z_off_1, self.order_matrix_1)
         log_diag_J = self.restore(log_diag_J, log_diag_J_off_1, self.order_matrix_1)
     
         return z, log_diag_J
-
-
-    def squeeze(self, x):
-        """Squeezes a C x H x W tensor into a 4C x H/2 x W/2 tensor.
-
-        (See Fig 3 in the real NVP paper.)
-
-        Args:
-            x: input tensor (B x C x H x W).
-        Returns:
-            the squeezed tensor (B x 4C x H/2 x W/2).
-        """
-        [B, C, H, W] = list(x.size())
-        x = x.reshape(B, C, H//2, 2, W//2, 2)
-        x = x.permute(0, 1, 3, 5, 2, 4)
-        x = x.reshape(B, C*4, H//2, W//2)
-        return x
-
-    def undo_squeeze(self, x):
-        """unsqueezes a C x H x W tensor into a C/4 x 2H x 2W tensor.
-
-        (See Fig 3 in the real NVP paper.)
-
-        Args:
-            x: input tensor (B x C x H x W).
-        Returns:
-            the squeezed tensor (B x C/4 x 2H x 2W).
-        """
-        [B, C, H, W] = list(x.size())
-        x = x.reshape(B, C//4, 2, 2, H, W)
-        x = x.permute(0, 1, 4, 2, 5, 3)
-        x = x.reshape(B, C//4, H*2, W*2)
-        return x
-
-    def order_matrix(self, channel):
-        """Constructs a matrix that defines the ordering of variables
-        when downscaling/upscaling is performed.
-
-        Args:
-          channel: number of features.
-        Returns:
-          a kernel for rearrange the variables.
-        """
-        weights = np.zeros((channel*4, channel, 2, 2))
-        ordering = np.array([[[[1., 0.],
-                               [0., 0.]]],
-                             [[[0., 0.],
-                               [0., 1.]]],
-                             [[[0., 1.],
-                               [0., 0.]]],
-                             [[[0., 0.],
-                               [1., 0.]]]])
-        for i in range(channel):
-            s1 = slice(i, i+1)
-            s2 = slice(4*i, 4*(i+1))
-            weights[s2, s1, :, :] = ordering
-        shuffle = np.array([4*i for i in range(channel)]
-                         + [4*i+1 for i in range(channel)]
-                         + [4*i+2 for i in range(channel)]
-                         + [4*i+3 for i in range(channel)])
-        weights = weights[shuffle, :, :, :].astype('float32')
-        return torch.tensor(weights)
-
-    def factor_out(self, x, order_matrix):
-        """Downscales and factors out the bottom half of the tensor.
-
-        (See Fig 4(b) in the real NVP paper.)
-
-        Args:
-            x: input tensor (B x C x H x W).
-            order_matrix: a kernel that defines the ordering of variables.
-        Returns:
-            the top half for further transformation (B x 2C x H/2 x W/2)
-            and the Gaussianized bottom half (B x 2C x H/2 x W/2).
-        """
-        x = F.conv2d(x, order_matrix, stride=2, padding=0)
-        [_, C, _, _] = list(x.size())
-        (on, off) = x.split(C//2, dim=1)
-        return on, off
-
-    def restore(self, on, off, order_matrix):
-        """Merges variables and restores their ordering.
-
-        (See Fig 4(b) in the real NVP paper.)
-
-        Args:
-            on: the active (transformed) variables (B x C x H x W).
-            off: the inactive variables (B x C x H x W).
-            order_matrix: a kernel that defines the ordering of variables.
-        Returns:
-            combined variables (B x 2C x H x W).
-        """
-        x = torch.cat((on, off), dim=1)
-        return F.conv_transpose2d(x, order_matrix, stride=2, padding=0)
-
-    def g(self, z):
-        """Transformation g: Z -> X (inverse of f).
-
-        Args:
-            z: tensor in latent space Z.
-        Returns:
-            transformed tensor in data space X.
-        """
-        x, x_off_1 = self.factor_out(z, self.order_matrix_1)
-
-        if self.datainfo.name in ['imnet32', 'imnet64', 'celeba']:
-            x, x_off_2 = self.factor_out(x, self.order_matrix_2)
-            x, x_off_3 = self.factor_out(x, self.order_matrix_3)
-
-            if self.datainfo.name in ['imnet64', 'celeba']:
-                x, x_off_4 = self.factor_out(x, self.order_matrix_4)
-
-                # SCALE 5: 4 x 4
-                for i in reversed(range(len(self.s5_ckbd))):
-                    x, _ = self.s5_ckbd[i](x, reverse=True)
-                
-                x = self.restore(x, x_off_4, self.order_matrix_4)
-
-                # SCALE 4: 8 x 8
-                x = self.squeeze(x)
-                for i in reversed(range(len(self.s4_chan))):
-                    x, _ = self.s4_chan[i](x, reverse=True)
-                x = self.undo_squeeze(x)
-
-            for i in reversed(range(len(self.s4_ckbd))):
-                x, _ = self.s4_ckbd[i](x, reverse=True)
-
-            x = self.restore(x, x_off_3, self.order_matrix_3)
-
-            # SCALE 3: 8(16) x 8(16)
-            x = self.squeeze(x)
-            for i in reversed(range(len(self.s3_chan))):
-                x, _ = self.s3_chan[i](x, reverse=True)
-            x = self.undo_squeeze(x)
-
-            for i in reversed(range(len(self.s3_ckbd))):
-                x, _ = self.s3_ckbd[i](x, reverse=True)
-
-            x = self.restore(x, x_off_2, self.order_matrix_2)
-
-            # SCALE 2: 16(32) x 16(32)
-            x = self.squeeze(x)
-            for i in reversed(range(len(self.s2_chan))):
-                x, _ = self.s2_chan[i](x, reverse=True)
-            x = self.undo_squeeze(x)
-
-        for i in reversed(range(len(self.s2_ckbd))):
-            x, _ = self.s2_ckbd[i](x, reverse=True)
-
-        x = self.restore(x, x_off_1, self.order_matrix_1)
-
-        # SCALE 1: 32(64) x 32(64)
-        x = self.squeeze(x)
-        for i in reversed(range(len(self.s1_chan))):
-            x, _ = self.s1_chan[i](x, reverse=True)
-        x = self.undo_squeeze(x)
-
-        for i in reversed(range(len(self.s1_ckbd))):
-            x, _ = self.s1_ckbd[i](x, reverse=True)
-
-        return x
-
-
-
-    def sample(self, size):
-        """Generates samples.
-
-        Args:
-            size: number of samples to generate.
-        Returns:
-            samples from the data space X.
-        """
-        C = self.datainfo.channel
-        H = W = self.datainfo.size
-        z = self.prior.sample((size, C, H, W))
-        return self.g(z)
-
 ```
+<p> 이 Jacobian을 계산하는 Layer들은 다음 포스트에서 자세히 살펴보겠습니다.  </p>
