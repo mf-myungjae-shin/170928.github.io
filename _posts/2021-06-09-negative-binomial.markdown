@@ -44,11 +44,11 @@ sitemap :
 
 <p>우선 stats 를 사용하게 된 이유는 pmf를 사용해서 probability를 얻고자 할 때, standardized form이 아닌 distribution 의 shift form을 사용하고자 하였기 때문입니다. stats에서 사용하는 negative binomial distribution의 수식은 다음과 같습니다. </p>
 
-<img src="D:\github\170928.github.io\_images\distributions\negative\stats.PNG?raw=true">
+<img src="https://github.com/170928/170928.github.io/blob/master/_images//distributions/negative/stats.PNG?raw=true">
 
 <p>그리고, 이 수식에 기반하여 stats.nbinom은 다음과 같이 사용합니다. "nbinom.pmf(k, n, p, loc)" 이때, k는 실패 횟수, n은 성공횟수 (위에서 설명한 r), p는 성공이 발생할 확률 (in 베르누이 시행), 그리고 loc은 standardform을 shift하기 위한 변수입니다. loc은 nbinom.pmf(k - loc, n, p) = nbinom.pmf(k, n, p, loc) 라고 공식 document에서 설명하고 있습니다. 즉, 실패 횟수가 평균적으로 loc번 줄어든 상태에서 n번 성공하는데 필요한 횟수의 분포가 된다고 생각하시면 좀 편하게 이해하실 수 있습니다. 아무래도 n이 클 때 loc이 크면 n번을 성공하기 위해 필요한 횟수가 줄어들겠죠 ...?  </p>
 
-<img src="D:\github\170928.github.io\_images\distributions\negative\negative-bimonial.png?raw=true">
+<img src="https://github.com/170928/170928.github.io/blob/master/_images/distributions/negative/negative-bimonial.png?raw=true">
 
 <p> 위의 그림은 n 번의 성공을 하기위해서 성공 확률 p가 0.25, 0.5, 0.75일 때 random variable X가 어떻게 분포하는지를 보여줍니다. 즉 X번 해야 n 번 성공하게 되는 분포가 어떤 확률로 존재하게 되는지를 보여줍니다. p가 낮을수록 X번의 평균이 증가한다는 것을 볼 수 있습니다. </p>
 
