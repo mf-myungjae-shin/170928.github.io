@@ -14,7 +14,12 @@ sitemap :
   priority : 1.0
 ---
 
+## Negative Binomial Distribution 
+
 <p> 다양한 확률분포들이 존재하고 실제 시계열 관련 업무에서 사용하고 있습니다. 그 중에서 최근 공부하고 정리가 필요하게 된 Negative Binomial Distribution에 대해서 정리하는 블로그를 쓰려고 합니다. </p>
+
+## 확률 분포란 ?
+
 
 <p> 우선 확률분포에 대해서 정확하게 정리하는게 필요한 것 같습니다. 확률 분포란, 어떤 확률 변수 (Random Variable) X가 가지는 확률을 수학적으로 모델링 한 것이라고 할 수 있습니다. 그리고, 이 때 이 확률 분포에 대해서 모델링을 한 함수에 대해서 만나게 되는 확률분포함수로 주로 pmf (probability mass function)과 pdf (probability density function)이 있습니다. </p>
 
@@ -23,6 +28,8 @@ sitemap :
 <p> random variable Q 가 2번 코인을 flip 해서 나오는 head의 수에 대한 random variable이라고 가정한 경우, Q는 0, 1, 2 가 가능합니다. 이때, 확률 질량 함수 f(0) = P(Q=0) = P(t, t) = 1/4, f(1) = P(Q=1) = P(h,t) + P(t,h) = 1/4 + 1/4 = 2/4 = 0.5, 그리고 f(2) = P(Q=2) = P(h, h) = 1/4 가 됩니다. 위의 주사위 예제보다는 감이 더 오는 예시라고 생각합니다. </p>
 
 <p> pdf (probability density function)은 continuous random variable X가 특정값을 가질 확률을 의미합니다. pmf와의 차이는 random variable X 가 discrete한 것인지 continuous 한 것이지에 의해 결정됩니다. 그러나, 수학적으로 위의 pmf와 같이 정확히 X="특정 값" 일 때의 확률을 정의할 수 없습니다. 간단하게 생각하면, continuous random variable에서의 X="특정 값"은 무한대의 개념 epsilon이 도입되게 되어 X="특정 값" \in "특정 값 - epsilon" < X < 특정 값"이되며 epsilon이 무한히 0에 다가가게 될 때 무한한 값을 가지게 되는 그런 복잡한 이야기가 있습니다. 저는 이 부분까지는 다루지 않고 scipy.stats의 활용까지 살펴볼 예정이기 때문에 넘어가도록 하겠습니다. </p>
+
+## 이항 분포 (Binomial Distribution)
 
 <p> 이 블로그의 목적인 negative binomial distribution을 이해하기 위해서는 우선 이항분포 (binomial distribution)에 대해서 이해 할 필요가 있습니다. 그리고 이 이항 분포를 이해하기 위해서는 베르누이 분포 (Bernoulli distribution)을 이해해야합니다. 베르누이 분포은 단순합니다. 단 1번의 실험에서 나오는 결과가 성공 or 실패라고 생각할 수 있을 때 (즉, label이 0 or 1인 binary label)의 확률 변수 (random variable) X의 분포입니다. 베르누이 분포에서 결과 p가 성공 or 실패할 확률 p 를 parameter로 입력하게 됩니다. </p>
 
@@ -33,6 +40,8 @@ sitemap :
 <p>그리고 이 이항분포는 위의 베르누이 분포를 n번 반복할 때의 성공 횟수를 확률 변수 (random variable) X로 하는 분포입니다. 이때 n번의 반복은 베르누이 시행이 독립시행으로써 반복 될 때의 분포가 됩니다. </p>
 
 <p>$$P(X=x) = {n \choose k}p^{x}(1-p)^{n-x}$$</p>
+
+## Negative Binomial Distribution
 
 <p> 이제, negative binomial distribution에 대해서 생각해봅시다. negative binomial distribution은 r-th번째의 성공에 관한 확률분포입니다. 즉, 위의 베르누이 시행을 통해서 우리가 r 번째 성공을 거둘 떄 까지의 반복 시행한 횟수를 X 라는 random variable로써 정의 합니다. 베르누이 시행의 확률 p와 성공횟수 r를 parameter을 negative binomial distribution에서는 필요하게 되며 이때 pmf는 아래와 같아집니다.</p>
 

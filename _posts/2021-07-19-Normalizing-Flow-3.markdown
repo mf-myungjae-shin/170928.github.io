@@ -1,6 +1,6 @@
 ---
 layout:     post
-title:      "Normalizing Flow - RealNVP 이론 과 구현까지 (2)"
+title:      "Normalizing Flow - RealNVP 이론 과 구현까지 (3)"
 date:       2021-7-19 00:00:00
 author:     "MJ Shin"
 tags:
